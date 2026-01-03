@@ -2,7 +2,7 @@
 
 ## Context
 
-High speed ADC/DACs are required for sending and receiving Microwave pulses to qubits across many QC architectures. I decided to write up a controller RTL for [JESD204B](https://www.ti.com/lit/ml/slap161/slap161.pdf?ts=1765905115257), a high speed interface which commonly sits between high speed data converters and FPGAs.
+High speed ADC/DACs are required for sending and receiving microwave pulses to qubits across many QC architectures. I decided to write up a controller RTL for [JESD204B](https://www.ti.com/lit/ml/slap161/slap161.pdf?ts=1765905115257), a high speed interface which commonly sits between high speed data converters and FPGAs.
 
 I am using open source tools: [Verilator](https://github.com/verilator/verilator) for SystemVerilog simulation and [GTKWave](https://gtkwave.sourceforge.net/) for viewing waveforms.
 
