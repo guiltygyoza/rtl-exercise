@@ -90,7 +90,7 @@ The pulse generator module generates I and Q samples in a continuous stream, ass
 
 The pulse generator would refuse to generate samples if the pulse parameters are erroneous: pulse sample length must be at least 2, `mu` (Gaussian mean) must not be smaller than the sample length, the sigma square inverse term must not be zero, and Wah-Wah frequency term must not be zero when Wah-Wah is turned on.
 
-TB collects the generated samples and checks them against golden values (calculated using SystemVerilog's system functions `exp()` and `cos()`). TB also checks if DUT refuses to generate under erroneous pulse parameters.
+TB collects the generated samples and checks them against golden values (calculated using SystemVerilog's system functions `$exp()` and `$cos()`). TB also checks if DUT refuses to generate under erroneous pulse parameters.
 
 Finally, TB exports all DUT-agenerated samples into a single JSON file. A script `plot_pulses.py` visualizes those samples.
 
