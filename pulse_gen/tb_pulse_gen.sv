@@ -40,6 +40,9 @@ logic [15:0]  cmd_mu;
 logic [31:0]  cmd_inv_sigma_square;
 logic signed [15:0] cmd_amp;
 logic signed [15:0] cmd_beta;
+logic               cmd_use_ww;
+logic signed [15:0] cmd_Am;
+logic [15:0]        cmd_wm;
 
 logic         start;
 
@@ -67,6 +70,9 @@ pulse_gen #(.T_CQ(T_CQ)) dut (
 	.cmd_inv_sigma_square(cmd_inv_sigma_square),
 	.cmd_amp(cmd_amp),
 	.cmd_beta(cmd_beta),
+	.cmd_use_ww(cmd_use_ww),
+	.cmd_Am(cmd_Am),
+	.cmd_wm(cmd_wm),
 
 	.start(start),
 
@@ -89,14 +95,14 @@ pulse_gen #(.T_CQ(T_CQ)) dut (
 clocking drv_cb @(posedge clk);
 	// Drive outputs 1ns after posedge, sample inputs at #1step
 	default input #1step output #1ns;
-	output cmd_val, cmd_sample_len, cmd_mu, cmd_inv_sigma_square, cmd_amp, cmd_beta, start;
+	output cmd_val, cmd_sample_len, cmd_mu, cmd_inv_sigma_square, cmd_amp, cmd_beta, cmd_use_ww, cmd_Am, cmd_wm, start;
 	input  cmd_rdy, out_val, out_i, out_q, out_last, busy, err_cmd;
 endclocking
 
 clocking mon_cb @(posedge clk);
 	// Sample everything at a small skew after posedge (avoid race with combinational)
 	default input #1ns output #0;
-	input cmd_val, cmd_sample_len, cmd_mu, cmd_inv_sigma_square, cmd_amp, cmd_beta, start;
+	input cmd_val, cmd_sample_len, cmd_mu, cmd_inv_sigma_square, cmd_amp, cmd_beta, cmd_use_ww, cmd_Am, cmd_wm, start;
 	input cmd_rdy, out_val, out_i, out_q, out_last, busy, err_cmd;
 endclocking
 /* verilator lint_on UNDRIVEN */
@@ -129,7 +135,8 @@ endfunction
 function automatic logic signed [15:0] real_to_sq0_15_sat(input real x);
 	int q;
 	begin
-		q = (x >= 0.0) ? int'(x * SQ15_SCALE + 0.5) : int'(x * SQ15_SCALE - 0.5);
+		// q = (x >= 0.0) ? int'(x * SQ15_SCALE + 0.5) : int'(x * SQ15_SCALE - 0.5);
+		q = $rtoi(x * SQ15_SCALE); // just truncate
 		if (q >  32767) q =  32767;
 		if (q < -32768) q = -32768;
 		real_to_sq0_15_sat = $signed(q)[15:0];
@@ -154,7 +161,7 @@ function automatic logic [31:0] inv_sigma2_uq1_31(input real sigma);
 				inv = (2.0 - (1.0 / (2.0**31)));
 
 			scaled = inv * (2.0**31);
-			q64 = longint'(scaled + 0.5);
+			q64 = longint'(scaled + 0.5); // rounding up
 			q32 = q64[31:0];
 			inv_sigma2_uq1_31 = q32;
 		end
@@ -171,6 +178,9 @@ typedef struct packed {
 	logic [31:0]         inv_sig2;
 	logic signed [15:0]  amp;
 	logic signed [15:0]  beta;
+	logic                use_ww;
+	logic signed [15:0]  Am;
+	logic [15:0]         wm;
 } cmd_t;
 
 /* verilator lint_off UNUSEDSIGNAL */
@@ -213,12 +223,72 @@ function automatic real drag_d_real(input int n, input cmd_t c);
 	end
 endfunction
 
+/* verilator lint_off UNUSEDSIGNAL */
+function automatic real cos_ww_real(input int n, input cmd_t c);
+/* verilator lint_on UNUSEDSIGNAL */
+	int unsigned mu;
+	real mu_r, wm_r, d_abs, phase, cos_val;
+	begin
+		/* verilator lint_off WIDTHEXPAND */
+		mu    = c.mu;
+		/* verilator lint_on WIDTHEXPAND */
+		mu_r  = $itor(mu);
+		wm_r  = $itor(c.wm) / 65536.0; // UQ0.16 to real turns per sample
+		d_abs = ($itor(n) >= mu_r) ? ($itor(n) - mu_r) : (mu_r - $itor(n)); // |n-mu|
+		phase = wm_r * d_abs; // phase in turns
+		cos_val = $cos(2.0 * 3.14159265358979323846 * phase);
+		cos_ww_real = cos_val;
+	end
+endfunction
+
+function automatic real ww_env_real(input int n, input cmd_t c);
+	real g, am, cos_val, mod_val, env;
+	begin
+		g = gauss_real(n, c);
+		if (c.use_ww) begin
+			am = sq0_15_to_real(c.Am);
+			cos_val = cos_ww_real(n, c);
+			mod_val = 1.0 - am * cos_val;
+			// Clamp modulation to [0, 1]
+			if (mod_val < 0.0) mod_val = 0.0;
+			if (mod_val > 1.0) mod_val = 1.0;
+			env = g * mod_val;
+		end else begin
+			env = g;
+		end
+		ww_env_real = env;
+	end
+endfunction
+
+function automatic real drag_d_ww_real(input int n, input cmd_t c);
+	int L;
+	real e_nm1, e_n, e_np1;
+	begin
+		L = int'(c.len);
+		if (L <= 1) begin
+			drag_d_ww_real = 0.0;
+		end else if (n <= 0) begin
+			e_n   = ww_env_real(0, c);
+			e_np1 = ww_env_real(1, c);
+			drag_d_ww_real = e_np1 - e_n;
+		end else if (n >= (L-1)) begin
+			e_n   = ww_env_real(L-1, c);
+			e_nm1 = ww_env_real(L-2, c);
+			drag_d_ww_real = e_n - e_nm1;
+		end else begin
+			e_np1 = ww_env_real(n+1, c);
+			e_nm1 = ww_env_real(n-1, c);
+			drag_d_ww_real = (e_np1 - e_nm1) * 0.5;
+		end
+	end
+endfunction
+
 function automatic logic signed [15:0] model_out_i(input int n, input cmd_t c);
-	real a, g, y;
+	real a, e, y;
 	begin
 		a = sq0_15_to_real(c.amp);
-		g = gauss_real(n, c);
-		y = a * g;
+		e = ww_env_real(n, c);
+		y = a * e;
 		model_out_i = real_to_sq0_15_sat(y);
 	end
 endfunction
@@ -228,7 +298,7 @@ function automatic logic signed [15:0] model_out_q(input int n, input cmd_t c);
 	begin
 		a = sq0_15_to_real(c.amp);
 		b = sq0_15_to_real(c.beta);
-		d = drag_d_real(n, c);
+		d = drag_d_ww_real(n, c);
 		y = b * a * d;
 		model_out_q = real_to_sq0_15_sat(y);
 	end
@@ -245,6 +315,9 @@ task automatic drive_idle_defaults();
 		drv_cb.cmd_inv_sigma_square <= 32'd0;
 		drv_cb.cmd_amp              <= 16'sd0;
 		drv_cb.cmd_beta             <= 16'sd0;
+		drv_cb.cmd_use_ww           <= 1'b0;
+		drv_cb.cmd_Am               <= 16'sd0;
+		drv_cb.cmd_wm               <= 16'd0;
 		drv_cb.start                <= 1'b0;
 	end
 endtask
@@ -268,6 +341,9 @@ task automatic send_cmd(input cmd_t c);
 		drv_cb.cmd_inv_sigma_square <= c.inv_sig2;
 		drv_cb.cmd_amp              <= c.amp;
 		drv_cb.cmd_beta             <= c.beta;
+		drv_cb.cmd_use_ww           <= c.use_ww;
+		drv_cb.cmd_Am               <= c.Am;
+		drv_cb.cmd_wm               <= c.wm;
 		drv_cb.cmd_val              <= 1'b1;
 
 		// wait for accept on sampled interface
@@ -343,7 +419,7 @@ task automatic json_close();
 	end
 endtask
 
-task automatic json_begin_pulse(input string name, input cmd_t c);
+task automatic json_begin_pulse(input string name, input cmd_t c, input real sigma);
 	begin
 		if (!json_first_pulse) $fdisplay(json_fd, "    ,");
 		json_first_pulse = 1'b0;
@@ -351,11 +427,15 @@ task automatic json_begin_pulse(input string name, input cmd_t c);
 		$fdisplay(json_fd, "    {");
 		$fdisplay(json_fd, "      \"name\": \"%s\",", name);
 		$fdisplay(json_fd, "      \"params\": {");
-		$fdisplay(json_fd, "        \"len\": %0d,", int'(c.len));
-		$fdisplay(json_fd, "        \"mu\": %0d,",  int'(c.mu));
+		$fdisplay(json_fd, "        \"len_uq16_0\": %0d,", int'(c.len));
+		$fdisplay(json_fd, "        \"mu_uq16_0\": %0d,",  int'(c.mu));
+		$fdisplay(json_fd, "        \"sigma_real\": %.12f,", sigma);
 		$fdisplay(json_fd, "        \"inv_sig2_uq1_31_hex\": \"%08h\",", c.inv_sig2);
 		$fdisplay(json_fd, "        \"amp_sq0_15\": %0d,", int'($signed(c.amp)));
-		$fdisplay(json_fd, "        \"beta_sq0_15\": %0d", int'($signed(c.beta)));
+		$fdisplay(json_fd, "        \"beta_sq0_15\": %0d,", int'($signed(c.beta)));
+		$fdisplay(json_fd, "        \"use_ww\": %0d,", int'(c.use_ww));
+		$fdisplay(json_fd, "        \"Am_sq0_15\": %0d,", int'($signed(c.Am)));
+		$fdisplay(json_fd, "        \"wm_uq0_16\": %0d", int'(c.wm));
 		$fdisplay(json_fd, "      },");
 		$fdisplay(json_fd, "      \"samples\": [");
 	end
@@ -408,7 +488,8 @@ task automatic run_and_check_pulse(
 	input int unsigned tol_q_lsb,
 	input bit check_math,
 	input bit dump_json,
-	input string pulse_name
+	input string pulse_name,
+	input real sigma
 );
 	int unsigned timeout;
 	int unsigned n_obs;
@@ -437,7 +518,7 @@ task automatic run_and_check_pulse(
 		L = int'(c.len);
 
 		if (dump_json) begin
-			json_begin_pulse(pulse_name, c);
+			json_begin_pulse(pulse_name, c, sigma);
 			first_sample = 1'b1;
 		end
 
@@ -461,19 +542,21 @@ task automatic run_and_check_pulse(
 					diff_i = abs_int(int'($signed(mon_cb.out_i)) - int'($signed(exp_i)));
 					diff_q = abs_int(int'($signed(mon_cb.out_q)) - int'($signed(exp_q)));
 
-					// if (diff_i > int'(tol_i_lsb)) begin
-					// 	$fatal(1,
-					// 		"ERROR: out_i mismatch n=%0d got=%0d exp=%0d diff=%0d tol=%0d",
-					// 		n_obs, mon_cb.out_i, exp_i, diff_i, tol_i_lsb
-					// 	);
-					// end
-
-					// if (diff_q > int'(tol_q_lsb)) begin
-					// 	$fatal(1,
-					// 		"ERROR: out_q mismatch n=%0d got=%0d exp=%0d diff=%0d tol=%0d",
-					// 		n_obs, mon_cb.out_q, exp_q, diff_q, tol_q_lsb
-					// 	);
-					// end
+					// -----------------------------------------------------------
+					// check DUT-generated values are within tolerance from golden
+					// -----------------------------------------------------------
+					if (diff_i > int'(tol_i_lsb)) begin
+						$fatal(1,
+							"ERROR: out_i mismatch n=%0d got=%0d exp=%0d diff=%0d tol=%0d",
+							n_obs, mon_cb.out_i, exp_i, diff_i, tol_i_lsb
+						);
+					end
+					if (diff_q > int'(tol_q_lsb)) begin
+						$fatal(1,
+							"ERROR: out_q mismatch n=%0d got=%0d exp=%0d diff=%0d tol=%0d",
+							n_obs, mon_cb.out_q, exp_q, diff_q, tol_q_lsb
+						);
+					end
 
 					if (dump_json) begin
 						json_write_sample(n_obs, mon_cb.out_i, mon_cb.out_q, exp_i, exp_q, first_sample);
@@ -510,8 +593,10 @@ task automatic run_and_check_pulse(
 			$fflush(json_fd);
 		end
 
-		$display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d protocol+math=%0d",
-				 c.len, c.mu, c.inv_sig2, c.amp, c.beta, check_math);
+		// $display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d, all in-phase values within %0d LSB(s) and quadrature values within %0d LSB(s) from golden.",
+		// 		 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math, tol_i_lsb, tol_q_lsb);
+		$display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d",
+				 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math);
 	end
 endtask
 // verilator lint_on UNUSEDSIGNAL
@@ -534,7 +619,7 @@ task automatic run_and_check_invalid_cmd(input cmd_t c);
 		if (mon_cb.busy) $fatal(1, "ERROR: DUT entered BUSY on invalid cmd.");
 		if (out_val_count != 0) $fatal(1, "ERROR: DUT produced out_val on invalid cmd.");
 
-		$display("PASS: Invalid cmd rejected. len=%0d mu=%0d inv_sig2=0x%08h", c.len, c.mu, c.inv_sig2);
+		$display("PASS: Invalid cmd rejected. len=%0d mu=%0d inv_sig2=0x%08h use_ww=%0d wm=%0d", c.len, c.mu, c.inv_sig2, c.use_ww, c.wm);
 	end
 endtask
 
@@ -545,39 +630,85 @@ initial begin
 	cmd_t c;
 	int unsigned TOL_I;
 	int unsigned TOL_Q;
+	real sigma;
 
 	drive_idle_defaults();
 
 	@(posedge rst_n);
 	@(mon_cb);
 
-	TOL_I = 32;
-	TOL_Q = 64;
+	TOL_I = 1;
+	TOL_Q = 2;
 
 	// Start recording
 	json_open();
 
 	// Valid pulses (protocol+math)
-	c.len      = 16'd64;
-	c.mu       = 16'd32;
-	c.inv_sig2 = inv_sigma2_uq1_31(6.0);
+	sigma      = 96.0;
+	c.len      = 16'd1024;
+	c.mu       = 16'd512;
+	c.inv_sig2 = inv_sigma2_uq1_31(sigma);
 	c.amp      = 16'sh4000;
 	c.beta     = 16'sd0;
-	run_and_check_pulse(c, TOL_I, 1, 1'b1, 1'b1, "pulse_0");
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
+	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_0", sigma);
 
-	c.len      = 16'd80;
-	c.mu       = 16'd40;
-	c.inv_sig2 = inv_sigma2_uq1_31(5.0);
+	sigma      = 72.7;
+	c.len      = 16'd900;
+	c.mu       = 16'd450;
+	c.inv_sig2 = inv_sigma2_uq1_31(sigma); // sigma in UQ8.8
 	c.amp      = -16'sh2000;
-	c.beta     = 16'sh1000;
-	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_1");
+	c.beta     = 16'sh4CCD; // beta in SQ0.15; 0.6
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
+	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_1", sigma);
 
-	c.len      = 16'd48;
-	c.mu       = 16'd24;
-	c.inv_sig2 = inv_sigma2_uq1_31(3.0);
+	sigma      = 60.35;
+	c.len      = 16'd480;
+	c.mu       = 16'd240;
+	c.inv_sig2 = inv_sigma2_uq1_31(sigma);
 	c.amp      = 16'sh6000;
-	c.beta     = 16'sh1800;
-	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_2");
+	c.beta     = 16'sh1800; // 0.1875
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
+	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_2", sigma);
+
+	// Wah-wah pulses
+	// sigma      = 80.0;
+	// c.len      = 16'd512;
+	// c.mu       = 16'd256;
+	// c.inv_sig2 = inv_sigma2_uq1_31(sigma);
+	// c.amp      = 16'sh5000;
+	// c.beta     = 16'sh2000; // 0.25
+	// c.use_ww   = 1'b1;
+	// c.Am       = 16'd4915; // 0.15 in SQ0.15
+	// c.wm       = 16'd410; // ~0.00625 turns per sample (1 turn within 2*sigma = 160 samples)
+	sigma      = 80.0;
+	c.len      = 16'd512;
+	c.mu       = 16'd256;
+	c.inv_sig2 = inv_sigma2_uq1_31(sigma);
+	c.amp      = 16'sh5000;
+	c.beta     = 16'sh2000;
+	c.use_ww   = 1'b1;
+	c.Am       = 16'd29491;   // 0.90
+	c.wm       = 16'd128;
+
+	run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_ww_0", sigma);
+
+	// sigma      = 100.0;
+	// c.len      = 16'd640;
+	// c.mu       = 16'd320;
+	// c.inv_sig2 = inv_sigma2_uq1_31(sigma);
+	// c.amp      = 16'sh6000;
+	// c.beta     = 16'sh3000;
+	// c.use_ww   = 1'b1;
+	// c.Am       = 16'd29491;   // 0.90
+	// c.wm       = 16'd205;     // 4 lobes target
+	// run_and_check_pulse(c, TOL_I, TOL_Q, 1'b1, 1'b1, "pulse_ww_1", sigma);
 
 	// Invalid commands (protocol only)
 	c.len      = 16'd32;
@@ -585,6 +716,9 @@ initial begin
 	c.inv_sig2 = inv_sigma2_uq1_31(4.0);
 	c.amp      = 16'sh2000;
 	c.beta     = 16'sh1000;
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
 	run_and_check_invalid_cmd(c);
 
 	c.len      = 16'd2;  // invalid: len <= 2
@@ -592,6 +726,9 @@ initial begin
 	c.inv_sig2 = inv_sigma2_uq1_31(2.0);
 	c.amp      = 16'sh2000;
 	c.beta     = 16'sd0;
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
 	run_and_check_invalid_cmd(c);
 
 	c.len      = 16'd16;
@@ -599,6 +736,19 @@ initial begin
 	c.inv_sig2 = 32'd0;  // invalid: inv_sig2 == 0
 	c.amp      = 16'sh2000;
 	c.beta     = 16'sd0;
+	c.use_ww   = 1'b0;
+	c.Am       = 16'sd0;
+	c.wm       = 16'd0;
+	run_and_check_invalid_cmd(c);
+
+	c.len      = 16'd64;
+	c.mu       = 16'd32;
+	c.inv_sig2 = inv_sigma2_uq1_31(10.0);
+	c.amp      = 16'sh2000;
+	c.beta     = 16'sd0;
+	c.use_ww   = 1'b1;
+	c.Am       = 16'sh4000;
+	c.wm       = 16'd0;  // invalid: use_ww=1 but wm=0
 	run_and_check_invalid_cmd(c);
 
 	// Stop recording

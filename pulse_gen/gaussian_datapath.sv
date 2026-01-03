@@ -46,19 +46,47 @@ module gaussian_datapath (
     logic lut_en;
     assign lut_en = (x_uq33_31_ext < X_MAX_UQ33_31);
 
-    // LUT address: Q4.6 bits around the decimal point of UQ33.31
-    // Q4.6 address corresponds to bits [34:31] (integer 2^3..2^0) and [30:25] (2^-1..2^-6).
-    logic [9:0] lut_addr;
-    assign lut_addr = x_uq33_31_ext[34:25];
+	// -------------------
+	// LUT for y = exp(-x)
+	// -------------------
+	logic [10:0] lut_addr, lut_addr_plus1;
+	logic [8:0]  frac;      // interpolation fraction (0..511)
+	assign lut_addr = x_uq33_31_ext[34:24];  // Q4.7
+	assign frac     = x_uq33_31_ext[23:15];  // 9 extra fractional bits
 
-    logic [15:0] lut_out;
+	logic [15:0] y0, y1;
+	assign lut_addr_plus1 = lut_addr + 11'd1;
+	exp_lut_2048 lut0 (.en(lut_en), .x(lut_addr),       .y(y0));
+	exp_lut_2048 lut1 (.en(lut_en), .x(lut_addr_plus1), .y(y1));
 
-    // LUT for y = exp(-x)
-    exp_lut_1024 u_exp_lut_1024 (
-        .en  (lut_en),
-        .x   (lut_addr),
-        .y   (lut_out)
-    );
+	// lut_out = y0 + (y1 - y0) * frac / 2^9
+	/* verilator lint_off UNUSEDSIGNAL */
+	logic signed [16:0] dy;
+	logic signed [25:0] interp_mul;
+	logic signed [25:0] interp_term;
+	logic signed [17:0] sum_wide;
+	/* verilator lint_on UNUSEDSIGNAL */
+	logic [15:0] lut_out;
+
+	assign dy         = $signed({1'b0,y1}) - $signed({1'b0,y0});     // signed
+	assign interp_mul = dy * $signed({1'b0, frac});                  // 17b * 10b -> 27b fits in 26/27; size as needed
+	assign interp_term = interp_mul >>> 9;                        // shift but keep the same width
+	assign sum_wide    = $signed({1'b0, y0}) + interp_term[17:0]; // truncate here
+	assign lut_out     = sum_wide[15:0];
+
+    // // LUT address: Q4.6 bits around the decimal point of UQ33.31
+    // // Q4.6 address corresponds to bits [34:31] (integer 2^3..2^0) and [30:25] (2^-1..2^-6).
+    // logic [9:0] lut_addr;
+    // assign lut_addr = x_uq33_31_ext[34:25];
+
+    // logic [15:0] lut_out;
+
+    // // LUT for y = exp(-x)
+    // exp_lut_1024 u_exp_lut_1024 (
+    //     .en  (lut_en),
+    //     .x   (lut_addr),
+    //     .y   (lut_out)
+    // );
 
 	// clamp output to 0 if enable is de-asserted
 	assign G_n = en ? lut_out : '0;
