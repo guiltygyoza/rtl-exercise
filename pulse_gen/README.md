@@ -25,7 +25,7 @@ MATH
 ```math
 \begin{align*}
 I[n] = A \cdot G[n] \\
-Q[n] = \beta \cdot D[n] \\
+Q[n] = \beta \cdot A \cdot D[n] \\
 \text{where} \\
 G[n] = \exp\left(-\frac{(n-\mu)^2}{2\sigma^2}\right) \\
 D[n] =
@@ -53,7 +53,7 @@ So we have:
 ```math
 \begin{align*}
 I[n] = A \cdot E[n] \\
-Q[n] = \beta \cdot D[n] \\
+Q[n] = \beta \cdot A \cdot D[n] \\
 \text{where} \\
 E[n] = G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right] \\
 D[n] =
