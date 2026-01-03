@@ -23,10 +23,24 @@ Using Gaussian as $$I(t)$$, we have:
 MATH
 
 ```math
+\begin{align*}
+I[n] = A \cdot G[n] \\
+Q[n] = \beta \cdot D[n]
+\end{align*}
 
+where:
+- \( G[n] = \exp\left(-\frac{(n-\mu)^2}{2\sigma^2}\right) \) is the Gaussian envelope.
+- \( D[n] \) is the discrete derivative of the envelope approximated as:
+  \[
+  D[n] =
+    \begin{cases}
+      G[n+1] - G[n] & n = 0 \\
+      G[n] - G[n-1] & n = L-1 \\
+      \frac{G[n+1] - G[n-1]}{2} & \text{otherwise}
+    \end{cases}
+  \]
 ```
-
-in which $$\beta$$ is a tunable parameter.
+- \( \beta \) is a tunable parameter.
 
 ### Wah-Wah pulse
 
@@ -41,7 +55,17 @@ They found that by modulating the original $$I(t)$$ (e.g. a Gaussian envelope) w
 So we have:
 
 ```math
-
+\begin{align*}
+I[n] = A \cdot G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right] \\
+Q[n] = \beta \cdot D[n] \\
+D[n] =
+  \begin{cases}
+    E[n+1] - E[n] & n = 0 \\
+    E[n] - E[n-1] & n = L-1 \\
+    \frac{E[n+1] - E[n-1]}{2} & \text{otherwise}
+  \end{cases} \\
+E[n] = G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right]
+\end{align*}
 ```
 
 in which $$\beta$$, $$A_m$$, $$\omega_m$$ are tunable parameters.

@@ -593,10 +593,10 @@ task automatic run_and_check_pulse(
 			$fflush(json_fd);
 		end
 
-		// $display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d, all in-phase values within %0d LSB(s) and quadrature values within %0d LSB(s) from golden.",
-		// 		 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math, tol_i_lsb, tol_q_lsb);
-		$display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d",
-				 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math);
+		$display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d, all in-phase values within %0d LSB(s) and quadrature values within %0d LSB(s) from golden.",
+				 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math, tol_i_lsb, tol_q_lsb);
+		// $display("PASS: Pulse len=%0d mu=%0d inv_sig2=0x%08h amp=%0d beta=%0d use_ww=%0d Am=%0d wm=%0d protocol+math=%0d",
+		// 		 c.len, c.mu, c.inv_sig2, c.amp, c.beta, c.use_ww, c.Am, c.wm, check_math);
 	end
 endtask
 // verilator lint_on UNUSEDSIGNAL
