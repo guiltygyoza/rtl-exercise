@@ -20,13 +20,17 @@ The DRAG (Derivative Removal by Adiabatic Gate) technique was proposed by Motzoi
 
 Using Gaussian as $$I(t)$$, we have:
 
-MATH
-
 ```math
 \begin{align*}
 I[n] = A \cdot G[n] \\
 Q[n] = \beta \cdot A \cdot D[n] \\
-\text{where} \\
+\end{align*}
+```
+
+where:
+
+```math
+\begin{align*}
 G[n] = \exp\left(-\frac{(n-\mu)^2}{2\sigma^2}\right) \\
 D[n] =
 \begin{cases}
@@ -36,7 +40,8 @@ D[n] =
 \end{cases}
 \end{align*}
 ```
-- \( \beta \) is a tunable parameter.
+
+in which $$\beta$$ is a tunable parameter for DRAG.
 
 ### Wah-Wah pulse
 
@@ -54,7 +59,13 @@ So we have:
 \begin{align*}
 I[n] = A \cdot E[n] \\
 Q[n] = \beta \cdot A \cdot D[n] \\
-\text{where} \\
+\end{align*}
+```
+
+where:
+
+```math
+\begin{align*}
 E[n] = G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right] \\
 D[n] =
   \begin{cases}
@@ -65,7 +76,7 @@ D[n] =
 \end{align*}
 ```
 
-in which $$\beta$$, $$A_m$$, $$\omega_m$$ are tunable parameters.
+in which $$\beta$$, $$A_m$$, $$\omega_m$$ are tunable parameters for Wah-Wah.
 
 ## Schematics
 
