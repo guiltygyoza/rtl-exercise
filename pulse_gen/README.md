@@ -98,8 +98,8 @@ Finally, TB exports all DUT-agenerated samples into a single JSON file. A script
 
 The following numerical methods and formats are used:
 
-- For the Gaussian envelope, $$\exp(-x)$$ is computed with a lookup table (LUT). All arithmetic for the Gaussian datapath is performed in UQ0.15 format (unsigned, 16 bits wide, with 15 fractional bits).
-- The Wah-Wah cosine term $$\cos(\omega_m (n-\mu))$$ is also produced by a LUT. The cosine datapath accepts the modulation frequency in UQ0.16 (unsigned, 16 bits, 16 fractional) and outputs in SQ1.15 format (signed, 16 bits, 1 integer + 15 fractional). The Wah-Wah modulation amplitude $$A_m$$ uses SQ0.15 format (signed, 16 bits, 15 fractional).
+- For the Gaussian envelope, $$\exp(-x)$$ is computed with a lookup table (LUT) with 11-bit address. All arithmetic for the Gaussian datapath is performed in UQ0.15 format (unsigned, 16 bits wide, with 15 fractional bits).
+- The Wah-Wah cosine term $$\cos(\omega_m (n-\mu))$$ is also produced by a LUT with 11-bit address. The cosine datapath accepts the modulation frequency in UQ0.16 (unsigned, 16 bits, 16 fractional) and outputs in SQ1.15 format (signed, 16 bits, 1 integer + 15 fractional). The Wah-Wah modulation amplitude $$A_m$$ uses SQ0.15 format (signed, 16 bits, 15 fractional).
 - The Q(t) samples of DRAG is computed with a symmetric first-order finite difference: $$D[n] = (E[n+1] - E[n-1])/2$$, where E[n] is the envelope term of the I(t) component. Forward/backward differences are used for samples at the boundaries. All envelope and difference values are kept in UQ1.15 (unsigned, 16 bits, 1 integer + 15 fractional) or a signed extension (e.g., Q2.15 for differences).
 
 ## CLI commands
