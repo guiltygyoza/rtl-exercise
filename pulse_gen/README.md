@@ -49,7 +49,9 @@ Wah-Wah pulse is designed to suppress external leakage: the states of neighborin
 
 The Wah-Wah technique was proposed by Schutjens et. al. in 2013 in this [paper](https://arxiv.org/pdf/1306.2279). Qubits sharing the same microwave line are set to different frequencies ($$\omega_{01}$$) but this can result in one's $$\omega_{01}$$ only slightly detuned from its neighbor's $$\omega_{12}$$ (leakage transition), as shown in the following diagram extracted from the 2013 paper:
 
-<img width="691" height="562" alt="image" src="https://github.com/user-attachments/assets/f0db91c7-d4a7-4ff5-a8d7-0eef4e1bd8ea" />
+<p align="center">
+  <img width="691" height="562" alt="image" src="https://github.com/user-attachments/assets/f0db91c7-d4a7-4ff5-a8d7-0eef4e1bd8ea" />
+</p>
 
 They found that by modulating the original $$I(t)$$ (e.g. a Gaussian envelope) with a $$[1 - A_m \cos{\omega_m (n-\mu)}]$$ term, $$\mu$$ being the same as that used in the Gaussian term, and $$Q(t)$$ follows the DRAG technique, external leakage can be suppressed.
 
