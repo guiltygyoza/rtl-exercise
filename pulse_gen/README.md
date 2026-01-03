@@ -25,20 +25,16 @@ MATH
 ```math
 \begin{align*}
 I[n] = A \cdot G[n] \\
-Q[n] = \beta \cdot D[n]
+Q[n] = \beta \cdot D[n] \\
+\text{where} \\
+G[n] = \exp\left(-\frac{(n-\mu)^2}{2\sigma^2}\right) \\
+D[n] =
+\begin{cases}
+	G[n+1] - G[n] & n = 0 \\
+	G[n] - G[n-1] & n = L-1 \\
+	\frac{G[n+1] - G[n-1]}{2} & \text{otherwise}
+\end{cases}
 \end{align*}
-
-where:
-- \( G[n] = \exp\left(-\frac{(n-\mu)^2}{2\sigma^2}\right) \) is the Gaussian envelope.
-- \( D[n] \) is the discrete derivative of the envelope approximated as:
-  \[
-  D[n] =
-    \begin{cases}
-      G[n+1] - G[n] & n = 0 \\
-      G[n] - G[n-1] & n = L-1 \\
-      \frac{G[n+1] - G[n-1]}{2} & \text{otherwise}
-    \end{cases}
-  \]
 ```
 - \( \beta \) is a tunable parameter.
 
@@ -56,15 +52,16 @@ So we have:
 
 ```math
 \begin{align*}
-I[n] = A \cdot G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right] \\
+I[n] = A \cdot E[n] \\
 Q[n] = \beta \cdot D[n] \\
+\text{where} \\
+E[n] = G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right] \\
 D[n] =
   \begin{cases}
     E[n+1] - E[n] & n = 0 \\
     E[n] - E[n-1] & n = L-1 \\
     \frac{E[n+1] - E[n-1]}{2} & \text{otherwise}
   \end{cases} \\
-E[n] = G[n] \left[1 - A_m \cos\left(\omega_m (n-\mu)\right)\right]
 \end{align*}
 ```
 
